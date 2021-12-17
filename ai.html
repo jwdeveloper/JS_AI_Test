@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <script type="module">
+        const videoElement = document.getElementsByClassName('input_video')[0];
+        const canvasElement = document.getElementsByClassName('output_canvas')[0];
+        const canvasCtx = canvasElement.getContext('2d');
+       
+        var boxX = 100;
+        var boxY = 100;
+
+        class Box {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.r = 50;
+                this.r2= 50;
+                this.color = "red";
+                this.text = "box";
+            }
+
+            draw(canvasCtx) {
+                canvasCtx.beginPath();
+                canvasCtx.fillStyle = "white";
+                canvasCtx.font = "30px Arial";
+                canvasCtx.lineWidth = "2";
+                canvasCtx.strokeStyle = this.color;
+                canvasCtx.rect(this.x - this.r, this.y - this.r2, 2 * this.r, 2 * this.r2);
+                canvasCtx.stroke();
+                canvasCtx.fillText(this.text, this.x - this.r / 2, this.y + this.r2 / 3);
+                canvasCtx.restore();
+            }
+            setColor(color) {
+                this.color = color;
+            }
+            setText(text) {
+                this.text = text;
+            }
+            setPosition(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            isClicked(a, b) {
+                var diff = Math.sqrt(Math.pow((a - this.x), 2) + Math.pow((b - this.y), 2));
+                if (diff <= this.r + 20) {
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        var boxes = [];
+        var NewBoxbutton = new Box(150, 60);
+        var ResetButton = new Box(500, 60);
+        var b = false;
+        var points = 0;
+        var startGameData;
+        var gamerun = false;
+        var drawcos = false;
+        NewBoxbutton.text = "New box";
+        NewBoxbutton.color = "yellow";
+        NewBoxbutton.r = 100;
+
+        ResetButton.text = "New game";
+        ResetButton.color = "white";
+        ResetButton.r = 100;
+        setInterval(game, 1000);
+
+        function game() {
+
+            if (gamerun == false) {
+                return;
+            }
+            else {
+                var c = Math.round( Math.random() * 2 );
+                console.log(c);
+                for (var i = 0; i < c; i++) {
+                    var y = (Math.random() * canvasElement.height);
+                    if (y < 160)
+                        y = 160;
+
+                    var b = new Box((Math.random() * canvasElement.width), y);
+                    boxes.push(b);
+                }
+
+
+            }
+        }
+
+        function onResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.setTransform(-1,-1,-1,-1,0,canvasCtx.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            if (results.multiHandLandmarks) {
+
+                var todelete = null;
+                for (const landmarks of results.multiHandLandmarks) {
+                    var x = canvasElement.width * landmarks[8].x;
+                    var y = canvasElement.height * landmarks[8].y;
+                    var dragDiff = Math.sqrt(Math.pow((landmarks[8].x - landmarks[4].x), 2) + Math.pow((landmarks[8].y - landmarks[4].y), 2));
+                    var isSelect = NewBoxbutton.isClicked(x, y);
+                    if (isSelect) {
+                        if (dragDiff < 0.04 && b == false) {
+                            boxes.push(new Box((Math.random() * canvasElement.width), 200 + (Math.random() * canvasElement.height)));
+                            NewBoxbutton.setColor('green');
+                            b = true;
+                            break;
+                        }
+                        else {
+                            NewBoxbutton.color = 'yellow';
+                        }
+                    }
+                    else {
+                        b = false;
+                    }
+
+                    isSelect = ResetButton.isClicked(x, y);
+                    if (isSelect && dragDiff < 0.04) {
+                        boxes = [];
+                        gamerun = true;
+                        points = 0;
+                        startGameData = new Date();
+                    }
+                    for (const box of boxes) {
+                        isSelect = box.isClicked(x, y);
+                        if (!isSelect) {
+                            continue;
+                        }
+                        if (dragDiff < 0.04) {
+                            if (gamerun) {
+                                points += 1;
+                                todelete = box;
+                                break;
+                            }
+                            canvasCtx.fillText("Drag detected", canvasElement.width - 400, 30);
+                            box.setPosition(x, y)
+                            box.setColor('green');
+                            break;
+                        }
+                        else {
+                            box.setColor('red');
+                        }
+                    }
+
+
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 5 });
+                    drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2 });
+                }
+                if (gamerun) {
+                    canvasCtx.fillText("Points: " + points, canvasElement.width - 400, 60);
+                    var diff = startGameData.getTime() - new Date(); // this is a time in milliseconds
+                    var diff_as_date = new Date(diff);
+                    var t = diff_as_date.getSeconds();
+                    if (t == 0)
+                        return;
+                    t = t - 44;
+
+                    canvasCtx.fillText("Time left: " + t, canvasElement.width - 600, 60);
+                    if (t < 1) {
+                        boxes = [];
+                        gamerun = false;
+                    }
+                }
+                else {
+                    canvasCtx.fillText("Game over - Score: " + points, canvasElement.width / 2, canvasElement.height / 2);
+                }
+                ResetButton.draw(canvasCtx);
+                NewBoxbutton.draw(canvasCtx);
+                for (const box of boxes) {
+                    box.draw(canvasCtx);
+                }
+                if (gamerun) {
+                    if (todelete != null) {
+                        const id = boxes.indexOf(todelete);
+                        const removedDrink = boxes.splice(id, 1);
+                    }
+                }
+
+            }
+        }
+
+
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 1280,
+            height: 720
+        });
+        camera.start();
+    </script>
+    <div class="container">
+        <canvas class="output_canvas" width="1280px" height="720px"></canvas>
+        <video class="input_video"></video>
+    </div>
+</body>
+
+</html>
